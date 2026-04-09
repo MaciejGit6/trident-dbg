@@ -25,6 +25,7 @@ void execute_debugger(pid_t child_pid) {
    
     signal(SIGINT, SIG_IGN);
 
+    //test
     std::string line;
     while (true) {
         std::cout << "trident> ";
