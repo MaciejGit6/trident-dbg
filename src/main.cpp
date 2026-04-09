@@ -7,6 +7,8 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <cstdint> 
+#include <sys/user.h>
+#include <map>
 
 class Breakpoint {
 public:
