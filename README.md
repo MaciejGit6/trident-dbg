@@ -2,18 +2,17 @@
 A lightweight C++ debugger for x86_64 Linux. Built to explore OS internals, memory management, and the ptrace system call API
 
 
-Trident is an interactive, user-space debugger for x86_64 Linux applications, written entirely in modern C++. It was engineered from the ground up to explore the complex boundary between user-space execution and the operating system kernel.
+I built Trident because I wanted to stop treating debuggers like black boxes and actually understand how they hijack a process. It’s a lightweight, interactive debugger for x86_64 Linux, written in modern C++ (mostly to get better at low-level systems stuff).
 
-Rather than relying on existing debugging frameworks, Trident implements core debugging primitives from scratch. Under the hood, it leverages the ptrace system call to intercept, control, and observe the execution state of child processes.
+Instead of just wrapping an existing library, I wrote the core primitives from scratch to see how the OS actually handles execution control. It’s been a deep dive into the ptrace system call and the constant battle between user-space and the kernel.
 
-Core Architecture & Capabilities:
+What it actually does:
+Process Control: I’m using ptrace and waitpid to handle attaching to processes, single-stepping through instructions, and resuming execution without crashing everything.
 
-Execution Control: Implements process attachment, single-stepping, and continuation using ptrace and waitpid state management.
+Breakpoint Injection: This was the coolest part to implement. It works by literally overwriting a byte of the target’s code with an INT 3 instruction (0xCC) to force a trap, then cleaning up the mess afterward.
 
-Software Breakpoints: Injects INT 3 (0xCC) trap instructions directly into process memory to halt execution at specific memory addresses.
+Register & Memory Tweaking: You can peek into (and actually modify) CPU registers and raw memory blocks while the process is paused.
 
-State Inspection: Reads and mutates CPU hardware registers and raw memory blocks within the target's address space.
+ELF Parsing: I had to get comfortable navigating ELF structures to make sense of the binary layout and map where things are actually happening in memory.
 
-Binary Parsing: Navigates ELF (Executable and Linkable Format) layouts to map execution states to underlying binary structures.
-
-This project serves as a practical demonstration of low-level systems programming, robust memory management, and a deep understanding of Linux OS internals.
+Basically, this project was my "final boss" for learning Linux internals and seeing how memory management works when you're the one in the driver's seat.
