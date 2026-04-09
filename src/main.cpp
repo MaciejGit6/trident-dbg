@@ -38,51 +38,98 @@ private:
     uint8_t m_saved_data;
 };
 
-std::vector<std::string> split_input(const std::string& s) {
-    std::vector<std::string> out;
-    std::stringstream ss(s);
-    std::string item;
-    while (std::getline(ss, item, ' ')) {
-        if (!item.empty()) out.push_back(item);
-    }
-    return out;
-}
 
-void execute_debugger(pid_t child_pid) {
-    int wait_status;
-    waitpid(child_pid, &wait_status, 0);
-    std::cout << "Attached to process " << child_pid << "\n";
+class Debugger {
+public:
+    Debugger(pid_t pid) : m_pid{pid} {}
 
-   
-    signal(SIGINT, SIG_IGN);
+    void run() {
+        int wait_status;
+        waitpid(m_pid, &wait_status, 0);
+        std::cout << "Attached to process " << m_pid << "\n";
 
-    //test
-    std::string line;
-    while (true) {
-        std::cout << "trident> ";
-        if (!std::getline(std::cin, line)) break;
-        auto args = split_input(line);
-        if (args.empty()) continue;
+        signal(SIGINT, SIG_IGN);
 
-        if (args[0] == "continue" || args[0] == "c") {
-            ptrace(PTRACE_CONT, child_pid, nullptr, nullptr);
-            waitpid(child_pid, &wait_status, 0);
-            if (WIFEXITED(wait_status)) break;
-        } else if (args[0] == "quit") {
-            kill(child_pid, SIGKILL);
-            break;
+        std::string line;
+        while (true) {
+            std::cout << "trident> ";
+            if (!std::getline(std::cin, line)) break;
+            
+            auto args = split_input(line);
+            if (args.empty()) continue;
+
+            std::string cmd = args[0];
+
+            if (cmd == "continue" || cmd == "c") {
+                ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
+                waitpid(m_pid, &wait_status, 0);
+                
+                if (WIFSTOPPED(wait_status)) {
+                    std::cout << "Stopped. Signal: " << WSTOPSIG(wait_status) << "\n";
+                    dump_registers(); // Show where we stopped
+                } else if (WIFEXITED(wait_status)) {
+                    break;
+                }
+            } 
+            // NEW: The break command!
+            else if (cmd == "break" || cmd == "b") {
+                if (args.size() < 2) continue;
+                std::intptr_t addr = std::stol(args[1], 0, 16);
+                
+                Breakpoint bp(m_pid, addr);
+                bp.enable();
+                m_breakpoints[addr] = bp; // Save it in our private map
+                
+                std::cout << "Breakpoint set at 0x" << std::hex << addr << std::dec << "\n";
+            }
+            // NEW: Command to read registers
+            else if (cmd == "regs") {
+                dump_registers();
+            }
+            else if (cmd == "quit" || cmd == "exit") {
+                kill(m_pid, SIGKILL);
+                break;
+            }
         }
     }
-}
+
+private:
+    pid_t m_pid;
+    std::map<std::intptr_t, Breakpoint> m_breakpoints; // Safe from the outside world
+
+    // We pulled your split_input function in here
+    std::vector<std::string> split_input(const std::string& s) {
+        std::vector<std::string> out;
+        std::stringstream ss(s);
+        std::string item;
+        while (std::getline(ss, item, ' ')) {
+            if (!item.empty()) out.push_back(item);
+        }
+        return out;
+    }
+
+    // A helper to show CPU state
+    void dump_registers() {
+        user_regs_struct regs;
+        ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+        std::cout << std::hex << "  RIP: 0x" << regs.rip << "  RAX: 0x" << regs.rax << std::dec << "\n";
+    }
+};
+
+
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) return -1;
+    if (argc < 2) {
+        std::cerr << "no exec to debug!\n";
+        return -1;
+    }
     pid_t pid = fork();
     if (pid == 0) {
         ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
         execl(argv[1], argv[1], nullptr);
     } else {
-        execute_debugger(pid);
+        Debugger dbg(pid);
+        dbg.run();
     }
     return 0;
 }
