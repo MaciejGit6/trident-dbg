@@ -19,7 +19,7 @@ public:
     void enable() {
         auto data = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
         m_saved_data = static_cast<uint8_t>(data & 0xFF);
-        uint64_t data_with_int3 = ((data & ~0xFF) | 0xCC); // inject trap
+        uint64_t data_with_int3 = ((data & ~0xFF) | 0xCC); //  trap
         ptrace(PTRACE_POKEDATA, m_pid, m_addr, data_with_int3);
         m_enabled = true;
     }
@@ -68,7 +68,7 @@ public:
                 
                 if (WIFSTOPPED(wait_status)) {
                     std::cout << "Stopped. Signal: " << WSTOPSIG(wait_status) << "\n";
-                    dump_registers(); // Show where we stopped
+                    dump_registers(); 
                 } else if (WIFEXITED(wait_status)) {
                     break;
                 }
@@ -80,11 +80,11 @@ public:
                 
                 Breakpoint bp(m_pid, addr);
                 bp.enable();
-                m_breakpoints[addr] = bp; // Save it in our private map
+                m_breakpoints[addr] = bp; 
                 
                 std::cout << "Breakpoint set at 0x" << std::hex << addr << std::dec << "\n";
             }
-            // NEW: Command to read registers
+            
             else if (cmd == "regs") {
                 dump_registers();
             }
@@ -97,9 +97,8 @@ public:
 
 private:
     pid_t m_pid;
-    std::map<std::intptr_t, Breakpoint> m_breakpoints; // Safe from the outside world
+    std::map<std::intptr_t, Breakpoint> m_breakpoints; 
 
-    // We pulled your split_input function in here
     std::vector<std::string> split_input(const std::string& s) {
         std::vector<std::string> out;
         std::stringstream ss(s);
