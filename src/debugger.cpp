@@ -88,11 +88,8 @@ void Debugger::dump_registers() {
 
 std::vector<std::string> Debugger::split_input(const std::string& s) {
     std::vector<std::string> out;
-    std::stringstream ss(s);
-
+    std::istringstream ss(s);
     std::string item;
-    while (std::getline(ss, item, ' ')) {
-        if (!item.empty()) out.push_back(item);
-    }
+    while (ss >> item) out.push_back(item);
     return out;
 }
