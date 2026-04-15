@@ -21,4 +21,6 @@ private:
     void set_breakpoint(std::intptr_t addr);
     void dump_registers();
     std::vector<std::string> split_input(const std::string& s);
+    void step_over_breakpoint();
+    void handle_stop(int wait_status);
 };

@@ -93,3 +93,44 @@ std::vector<std::string> Debugger::split_input(const std::string& s) {
     while (ss >> item) out.push_back(item);
     return out;
 }
+
+void Debugger::step_over_breakpoint() {
+    user_regs_struct regs;
+    ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+
+    std::intptr_t possible_bp = static_cast<std::intptr_t>(regs.rip) - 1;
+    auto it = m_breakpoints.find(possible_bp);
+    if (it == m_breakpoints.end() || !it->second.is_enabled()) return;
+
+    it->second.disable();                                        // restore original byte
+    regs.rip = static_cast<unsigned long long>(possible_bp);    // rewind RIP by 1
+    ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+
+    ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);         // step over real instruction
+    int wait_status;
+    waitpid(m_pid, &wait_status, 0);
+
+    it->second.enable();                                         // re-arm
+}
+
+void Debugger::handle_stop(int wait_status) {
+    if (WIFEXITED(wait_status)) {
+        std::cout << "Process exited with code " << WEXITSTATUS(wait_status) << "\n";
+        exit(0);
+    }
+    if (WIFSTOPPED(wait_status)) {
+        int sig = WSTOPSIG(wait_status);
+        if (sig == SIGTRAP) {
+            user_regs_struct regs;
+            ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+            std::intptr_t possible_bp = static_cast<std::intptr_t>(regs.rip) - 1;
+            if (m_breakpoints.count(possible_bp))
+                std::cout << "Breakpoint hit at 0x" << std::hex << possible_bp << std::dec << "\n";
+            else
+                std::cout << "Stopped (SIGTRAP).\n";
+        } else {
+            std::cout << "Stopped. Signal: " << sig << " (" << strsignal(sig) << ")\n";
+        }
+        dump_registers();
+    }
+}
