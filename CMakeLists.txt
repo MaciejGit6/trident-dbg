@@ -10,9 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) 
 
 # Define the main executable
-add_executable(trident_dbg 
+add_executable(trident_dbg
     src/main.cpp
-    # You will add future source files here, e.g., src/debugger.cpp
+    src/debugger.cpp
+    src/breakpoint.cpp
 )
 
 # Apply strict compiler warnings (Industry Best Practice)
