@@ -6,7 +6,7 @@
 
 class Breakpoint {
 public:
-    Breakpoint() = default;
+    Breakpoint() : m_pid{0}, m_addr{0}, m_enabled{false}, m_saved_data{0} {}
 
     Breakpoint(pid_t pid, std::intptr_t addr);
 
