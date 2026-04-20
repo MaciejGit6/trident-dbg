@@ -5,6 +5,21 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/user.h>
+#include <fstream>
+
+std::intptr_t Debugger::read_load_address() {
+    std::string maps_path = "/proc/" + std::to_string(m_pid) + "/maps";
+    std::ifstream maps(maps_path);
+    std::string line;
+    while (std::getline(maps, line)) {
+        //Lines look like: 555555554000-555555556000 r--p 00000000 fd:01 12345  /path/to/binary
+        if (line.find(m_prog) == std::string::npos) continue;
+        if (line.find("r-xp") == std::string::npos) continue;   //executable segment
+        std::intptr_t addr = std::stol(line, nullptr, 16);
+        return addr;
+    }
+    return 0;
+}
 
 void Debugger::print_help() {
     std::cout 
@@ -24,7 +39,13 @@ void Debugger::print_help() {
 void Debugger::run() {
     int wait_status;
     waitpid(m_pid, &wait_status, 0);
-    std::cout << "Attached to  process " << m_pid << "\n";
+
+    m_load_addr = read_load_address();
+
+    std::cout << "Attached to process " << m_pid << "\n";
+    if (m_load_addr)
+        std::cout << "Load address: 0x" << std::hex << m_load_addr << std::dec
+                  << "  (add this to objdump offsets for PIE binaries)\n";
 
 
     signal(SIGINT, SIG_IGN);

@@ -12,6 +12,8 @@ public:
 
 private:
     pid_t m_pid;
+    std::string  m_prog;
+    std::intptr_t m_load_addr;
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
 
 
@@ -29,4 +31,5 @@ private:
     void delete_breakpoint(std::intptr_t addr);
     void write_memory(std::intptr_t addr, uint64_t val);
     void print_help();
+    std::intptr_t read_load_address();
 };

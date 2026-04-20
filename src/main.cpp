@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
         ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
         execl(argv[1], argv[1], nullptr);
     } else {
-        Debugger dbg(pid);
+        Debugger dbg(pid, argv[1]);
         dbg.run();
     }
     return 0;
