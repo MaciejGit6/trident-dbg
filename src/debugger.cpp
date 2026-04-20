@@ -70,15 +70,17 @@ void Debugger::set_breakpoint(std::intptr_t addr) {
 void Debugger::dump_registers() {
     user_regs_struct regs;
     ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+
     std::cout << std::hex
-              << "  RIP: 0x" << regs.rip
-              << "  RSP: 0x" << regs.rsp
-              << "  RBP: 0x" << regs.rbp
-              << "\n"
-              << "  RAX: 0x" << regs.rax
-              << "  RBX: 0x" << regs.rbx
-              << "  RCX: 0x" << regs.rcx
-              << "\n"
+              << "  RIP: 0x" << regs.rip   << "  RFLAGS: 0x" << regs.eflags << "\n"
+              << "  RSP: 0x" << regs.rsp   << "  RBP:    0x" << regs.rbp    << "\n"
+              << "  RAX: 0x" << regs.rax   << "  RBX:    0x" << regs.rbx    << "\n"
+              << "  RCX: 0x" << regs.rcx   << "  RDX:    0x" << regs.rdx    << "\n"
+              << "  RSI: 0x" << regs.rsi   << "  RDI:    0x" << regs.rdi    << "\n"
+              << "  R8:  0x" << regs.r8    << "  R9:     0x" << regs.r9     << "\n"
+              << "  R10: 0x" << regs.r10   << "  R11:    0x" << regs.r11    << "\n"
+              << "  R12: 0x" << regs.r12   << "  R13:    0x" << regs.r13    << "\n"
+              << "  R14: 0x" << regs.r14   << "  R15:    0x" << regs.r15    << "\n"
               << std::dec;
 }
 
