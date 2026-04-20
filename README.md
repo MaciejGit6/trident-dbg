@@ -47,6 +47,7 @@ Available commands inside the debugger:
 | `regs` | Dump CPU registers |
 | `quit` / `exit` | Kill the process and exit |
 | `step` / `si`               | Execute one instruction and stop      |
+| `mem <addr> [n]`            | Read n 8-byte words from address (default 1) |
 
 ## How It Works
 

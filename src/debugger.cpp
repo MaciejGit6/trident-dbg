@@ -39,6 +39,14 @@ void Debugger::handle_command(const std::string& line) {
         set_breakpoint(addr);
     } else if (cmd == "step" || cmd == "si") {
         step();
+    } else if (cmd == "mem") {
+        if (args.size() < 2) {
+            std::cout << "usage: mem <addr> [n_words]\n";
+            return;
+        }
+        std::intptr_t addr   = std::stol(args[1], nullptr, 16);
+        size_t        n      = args.size() >= 3 ? std::stoul(args[2]) : 1;
+        read_memory(addr, n);
     } else if (cmd == "regs") {
         dump_registers();
     } else if (cmd == "quit" || cmd == "exit") {
@@ -97,6 +105,15 @@ void Debugger::dump_registers() {
               << std::dec;
 }
 
+void Debugger::read_memory(std::intptr_t addr, size_t n_words) {
+    std::cout << std::hex;
+    for (size_t i = 0; i < n_words; ++i) {
+        std::intptr_t cur = addr + static_cast<std::intptr_t>(i * 8);
+        long word = ptrace(PTRACE_PEEKDATA, m_pid, cur, nullptr);
+        std::cout << "  0x" << cur << ":  0x" << static_cast<uint64_t>(word) << "\n";
+    }
+    std::cout << std::dec;
+}
 
 std::vector<std::string> Debugger::split_input(const std::string& s) {
     std::vector<std::string> out;

@@ -23,4 +23,6 @@ private:
     std::vector<std::string> split_input(const std::string& s);
     void step_over_breakpoint();
     void handle_stop(int wait_status);
+
+    void read_memory(std::intptr_t addr, size_t n_words);
 };
