@@ -28,4 +28,5 @@ private:
     void list_breakpoints();
     void delete_breakpoint(std::intptr_t addr);
     void write_memory(std::intptr_t addr, uint64_t val);
+    void print_help();
 };

@@ -6,6 +6,20 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 
+void Debugger::print_help() {
+    std::cout 
+        "Commands:\n"
+        "  break <addr>  / b <addr>     Set a breakpoint at hex address\n"
+        "  delete <addr> / del <addr>   Remove breakpoint at hex address\n"
+        "  info          / bps          List all breakpoints\n"
+        "  continue      / c            Resume execution\n"
+        "  step          / si           Execute one instruction\n"
+        "  regs                         Dump all general-purpose registers\n"
+        "  mem <addr> [n]               Read n 8-byte words from address\n"
+        "  memset <addr> <val>          Write one 8-byte word to address\n"
+        "  quit          / exit         Kill process and exit\n"
+        "  help          / ?            Show this message\n";
+}
 
 void Debugger::run() {
     int wait_status;
@@ -60,6 +74,8 @@ void Debugger::handle_command(const std::string& line) {
         write_memory(addr, val);
     } else if (cmd == "regs") {
         dump_registers();
+    } else if (cmd == "help" || cmd == "?") {
+        print_help();
     } else if (cmd == "quit" || cmd == "exit") {
         kill(m_pid, SIGKILL);
         exit(0);
