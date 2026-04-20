@@ -48,17 +48,14 @@ void Debugger::handle_command(const std::string& line) {
 }
 
 void Debugger::continue_execution() {
-    int wait_status;
+    step_over_breakpoint();   //rewinding RIP, restore byte; single-step past it, re-arm
+
     ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
+
+    int wait_status;
     waitpid(m_pid, &wait_status, 0);
 
-    if (WIFSTOPPED(wait_status)) {
-        std::cout << " Stopped. Signal: " << WSTOPSIG(wait_status) << "\n";
-        dump_registers();
-    } else if (WIFEXITED(wait_status)) {
-        std::cout << "Process exited.\n";
-        exit(0);
-    }
+    handle_stop(wait_status);
 }
 
 void Debugger::set_breakpoint(std::intptr_t addr) {
