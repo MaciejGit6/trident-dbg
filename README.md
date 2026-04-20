@@ -46,6 +46,7 @@ Available commands inside the debugger:
 | `continue` / `c` | Resume execution |
 | `regs` | Dump CPU registers |
 | `quit` / `exit` | Kill the process and exit |
+| `step` / `si`               | Execute one instruction and stop      |
 
 ## How It Works
 

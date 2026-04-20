@@ -37,6 +37,8 @@ void Debugger::handle_command(const std::string& line) {
         if (args.size() < 2) return;
         std::intptr_t addr = std::stol(args[1], 0, 16);
         set_breakpoint(addr);
+    } else if (cmd == "step" || cmd == "si") {
+        step();
     } else if (cmd == "regs") {
         dump_registers();
     } else if (cmd == "quit" || cmd == "exit") {
@@ -51,6 +53,17 @@ void Debugger::continue_execution() {
     step_over_breakpoint();   //rewinding RIP, restore byte; single-step past it, re-arm
 
     ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
+
+    int wait_status;
+    waitpid(m_pid, &wait_status, 0);
+
+    handle_stop(wait_status);
+}
+
+void Debugger::step() {
+    step_over_breakpoint();  
+
+    ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
 
     int wait_status;
     waitpid(m_pid, &wait_status, 0);

@@ -17,7 +17,7 @@ private:
 
     void handle_command(const std::string& line);
     void continue_execution();
-    
+    void step(); 
     void set_breakpoint(std::intptr_t addr);
     void dump_registers();
     std::vector<std::string> split_input(const std::string& s);
