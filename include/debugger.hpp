@@ -25,4 +25,6 @@ private:
     void handle_stop(int wait_status);
 
     void read_memory(std::intptr_t addr, size_t n_words);
+    void list_breakpoints();
+    void delete_breakpoint(std::intptr_t addr);
 };

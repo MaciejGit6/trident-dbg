@@ -47,6 +47,12 @@ void Debugger::handle_command(const std::string& line) {
         std::intptr_t addr   = std::stol(args[1], nullptr, 16);
         size_t        n      = args.size() >= 3 ? std::stoul(args[2]) : 1;
         read_memory(addr, n);
+    } else if (cmd == "info" || cmd == "bps") {
+        list_breakpoints();
+    } else if (cmd == "delete" || cmd == "del") {
+        if (args.size() < 2) { std::cout << "usage: del <addr>\n"; return; }
+        std::intptr_t addr = std::stol(args[1], nullptr, 16);
+        delete_breakpoint(addr);
     } else if (cmd == "regs") {
         dump_registers();
     } else if (cmd == "quit" || cmd == "exit") {
@@ -85,6 +91,30 @@ void Debugger::set_breakpoint(std::intptr_t addr) {
     bp.enable();
     m_breakpoints[addr] = bp;
     std::cout << "Breakpoint set at 0x" << std::hex << addr << std::dec << "\n";
+}
+
+void Debugger::list_breakpoints() {
+    if (m_breakpoints.empty()) {
+        std::cout << "No breakpoints set.\n";
+        return;
+    }
+    int i = 0;
+    for (const auto& [addr, bp] : m_breakpoints) {
+        std::cout << "  [" << i++ << "] 0x" << std::hex << addr << std::dec
+                  << "  " << (bp.is_enabled() ? "enabled" : "disabled") << "\n";
+    }
+}
+
+void Debugger::delete_breakpoint(std::intptr_t addr) {
+    auto it = m_breakpoints.find(addr);
+    if (it == m_breakpoints.end()) {
+        std::cout << "No breakpoint at 0x" << std::hex << addr << std::dec << "\n";
+        return;
+    }
+    if (it->second.is_enabled())
+        it->second.disable();
+    m_breakpoints.erase(it);
+    std::cout << "Breakpoint at 0x" << std::hex << addr << std::dec << " removed.\n";
 }
 
 
