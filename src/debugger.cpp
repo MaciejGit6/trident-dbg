@@ -53,6 +53,11 @@ void Debugger::handle_command(const std::string& line) {
         if (args.size() < 2) { std::cout << "usage: del <addr>\n"; return; }
         std::intptr_t addr = std::stol(args[1], nullptr, 16);
         delete_breakpoint(addr);
+    } else if (cmd == "memset") {
+        if (args.size() < 3) { std::cout << "usage: memset <addr> <val>\n"; return; }
+        std::intptr_t addr = std::stol(args[1], nullptr, 16);
+        uint64_t      val  = std::stoull(args[2], nullptr, 16);
+        write_memory(addr, val);
     } else if (cmd == "regs") {
         dump_registers();
     } else if (cmd == "quit" || cmd == "exit") {
@@ -143,6 +148,12 @@ void Debugger::read_memory(std::intptr_t addr, size_t n_words) {
         std::cout << "  0x" << cur << ":  0x" << static_cast<uint64_t>(word) << "\n";
     }
     std::cout << std::dec;
+}
+
+void Debugger::write_memory(std::intptr_t addr, uint64_t val) {
+    ptrace(PTRACE_POKEDATA, m_pid, addr, val);
+    std::cout << "Wrote 0x" << std::hex << val
+              << " to 0x" << addr << std::dec << "\n";
 }
 
 std::vector<std::string> Debugger::split_input(const std::string& s) {
