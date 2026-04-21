@@ -33,4 +33,5 @@ private:
     void print_help();
     std::intptr_t read_load_address();
     bool ptrace_check(const char* op, long ret) const;
+    void set_register(const std::string& name, uint64_t val);
 };

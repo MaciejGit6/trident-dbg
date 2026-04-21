@@ -34,6 +34,7 @@ void Debugger::print_help() {
         "  memset <addr> <val>          Write one 8-byte word to address\n"
         "  quit          / exit         Kill process and exit\n"
         "  help          / ?            Show this message\n";
+        "  setreg <reg> <val>           Write hex value to a named register\n"
 }
 
 void Debugger::run() {
@@ -93,6 +94,10 @@ void Debugger::handle_command(const std::string& line) {
         std::intptr_t addr = std::stol(args[1], nullptr, 16);
         uint64_t      val  = std::stoull(args[2], nullptr, 16);
         write_memory(addr, val);
+    } else if (cmd == "setreg") {
+        if (args.size() < 3) { std::cout << "usage: setreg <reg> <val>\n"; return; }
+        uint64_t val = std::stoull(args[2], nullptr, 16);
+        set_register(args[1], val);
     } else if (cmd == "regs") {
         dump_registers();
     } else if (cmd == "help" || cmd == "?") {
@@ -256,4 +261,37 @@ bool Debugger::ptrace_check(const char* op, long ret) const {
         return false;
     }
     return true;
+}
+
+void Debugger::set_register(const std::string& name, uint64_t val) {
+    user_regs_struct regs;
+    long ret = ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+    if (!ptrace_check("GETREGS", ret)) return;
+
+    bool found = true;
+    if      (name == "rax") regs.rax = val;
+    else if (name == "rbx") regs.rbx = val;
+    else if (name == "rcx") regs.rcx = val;
+    else if (name == "rdx") regs.rdx = val;
+    else if (name == "rsi") regs.rsi = val;
+    else if (name == "rdi") regs.rdi = val;
+    else if (name == "rbp") regs.rbp = val;
+    else if (name == "rsp") regs.rsp = val;
+    else if (name == "rip") regs.rip = val;
+    else if (name == "r8" ) regs.r8  = val;
+    else if (name == "r9" ) regs.r9  = val;
+    else if (name == "r10") regs.r10 = val;
+    else if (name == "r11") regs.r11 = val;
+    else if (name == "r12") regs.r12 = val;
+    else if (name == "r13") regs.r13 = val;
+    else if (name == "r14") regs.r14 = val;
+    else if (name == "r15") regs.r15 = val;
+    else { std::cout << "Unknown register: " << name << "\n"; found = false; }
+
+    if (!found) return;
+
+    ret = ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+    if (!ptrace_check("SETREGS", ret)) return;
+
+    std::cout << name << " = 0x" << std::hex << val << std::dec << "\n";
 }
