@@ -37,11 +37,78 @@ void Debugger::print_help() {
         "  setreg <reg> <val>           Write hex value to a named register\n"
 }
 
+void Debugger::load_symbols() {
+    std::ifstream f(m_prog, std::ios::binary);
+    if (!f) { std::cerr << "Cannot open " << m_prog << " for symbol parsing\n"; return; }
+
+    Elf64_Ehdr ehdr;
+    f.read(reinterpret_cast<char*>(&ehdr), sizeof(ehdr));
+    if (ehdr.e_ident[EI_MAG0] != ELFMAG0 || ehdr.e_ident[EI_CLASS] != ELFCLASS64) {
+        std::cerr << "Not a 64-bit ELF binary\n"; return;
+    }
+
+    // Read section headers
+    std::vector<Elf64_Shdr> shdrs(ehdr.e_shnum);
+    f.seekg(ehdr.e_shoff);
+    f.read(reinterpret_cast<char*>(shdrs.data()), ehdr.e_shnum * sizeof(Elf64_Shdr));
+
+    // Load section-name string table
+    const Elf64_Shdr& shstrtab_hdr = shdrs[ehdr.e_shstrndx];
+    std::vector<char> shstrtab(shstrtab_hdr.sh_size);
+    f.seekg(shstrtab_hdr.sh_offset);
+    f.read(shstrtab.data(), shstrtab_hdr.sh_size);
+
+    // Find .symtab and its associated .strtab
+    Elf64_Shdr* symtab_hdr  = nullptr;
+    Elf64_Shdr* strtab_hdr  = nullptr;
+    for (auto& shdr : shdrs) {
+        std::string sec_name = &shstrtab[shdr.sh_name];
+        if (shdr.sh_type == SHT_SYMTAB && sec_name == ".symtab") symtab_hdr = &shdr;
+        if (shdr.sh_type == SHT_STRTAB && sec_name == ".strtab") strtab_hdr = &shdr;
+    }
+    if (!symtab_hdr || !strtab_hdr) {
+        std::cerr << "No .symtab found (stripped binary?)\n"; return;
+    }
+
+    // Read string table
+    std::vector<char> strtab(strtab_hdr->sh_size);
+    f.seekg(strtab_hdr->sh_offset);
+    f.read(strtab.data(), strtab_hdr->sh_size);
+
+    // Read symbol entries
+    size_t n_syms = symtab_hdr->sh_size / sizeof(Elf64_Sym);
+    std::vector<Elf64_Sym> syms(n_syms);
+    f.seekg(symtab_hdr->sh_offset);
+    f.read(reinterpret_cast<char*>(syms.data()), symtab_hdr->sh_size);
+
+    for (const auto& sym : syms) {
+        if (sym.st_name == 0 || sym.st_value == 0) continue;
+        std::string name = &strtab[sym.st_name];
+        m_symbols[name] = static_cast<std::intptr_t>(sym.st_value);
+    }
+    std::cout << "Loaded " << m_symbols.size() << " symbols.\n";
+}
+
+std::intptr_t Debugger::resolve(const std::string& s) {
+    // If it looks like a hex address, use it directly
+    if (s.size() > 2 && s[0] == '0' && s[1] == 'x')
+        return std::stol(s, nullptr, 16);
+
+    auto it = m_symbols.find(s);
+    if (it == m_symbols.end()) {
+        std::cerr << "Symbol not found: " << s << "\n";
+        return 0;
+    }
+    // File offset + runtime load base = actual address
+    return it->second + m_load_addr;
+}
+
 void Debugger::run() {
     int wait_status;
     waitpid(m_pid, &wait_status, 0);
 
     m_load_addr = read_load_address();
+    load_symbols();
 
     std::cout << "Attached to process " << m_pid << "\n";
     if (m_load_addr)
@@ -71,8 +138,8 @@ void Debugger::handle_command(const std::string& line) {
         continue_execution();
     } else if (cmd == "break" || cmd == "b") {
         if (args.size() < 2) return;
-        std::intptr_t addr = std::stol(args[1], 0, 16);
-        set_breakpoint(addr);
+        std::intptr_t addr = resolve(args[1]);
+        if (addr) set_breakpoint(addr);
     } else if (cmd == "step" || cmd == "si") {
         step();
     } else if (cmd == "mem") {

@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <sys/types.h>
+#include <unordered_map>
 
 class Debugger {
 public:
@@ -15,6 +16,10 @@ private:
     std::string  m_prog;
     std::intptr_t m_load_addr;
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
+
+    std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> file offset
+    void load_symbols();
+    std::intptr_t resolve(const std::string& name_or_addr);
 
 
     void handle_command(const std::string& line);
