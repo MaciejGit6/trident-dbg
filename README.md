@@ -26,6 +26,8 @@ make
 
 ```bash
 ./trident_dbg <executable>
+# Attach to an already-running process
+./trident_dbg --pid <pid>
 ```
 
 The fastest way to test it is with the included dummy program:
