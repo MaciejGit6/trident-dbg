@@ -24,3 +24,31 @@ void Breakpoint::disable() {
 bool Breakpoint::is_enabled() const { return m_enabled; }
 
 std::intptr_t Breakpoint::get_addr() const { return m_addr; }
+
+
+void Breakpoint::enable() {
+    errno = 0;
+    long data = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
+    if (data == -1 && errno != 0) {
+        std::cerr << "enable: PEEKDATA failed at 0x" << std::hex << m_addr
+                  << ": " << std::strerror(errno) << "\n";
+        return;
+    }
+    m_saved_data = static_cast<uint8_t>(data & 0xFF);
+    uint64_t patched = ((data & ~0xFFL) | 0xCC);
+    ptrace(PTRACE_POKEDATA, m_pid, m_addr, patched);
+    m_enabled = true;
+}
+
+void Breakpoint::disable() {
+    errno = 0;
+    long data = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
+    if (data == -1 && errno != 0) {
+        std::cerr << "disable: PEEKDATA failed at 0x" << std::hex << m_addr
+                  << ": " << std::strerror(errno) << "\n";
+        return;
+    }
+    uint64_t restored = ((data & ~0xFFL) | m_saved_data);
+    ptrace(PTRACE_POKEDATA, m_pid, m_addr, restored);
+    m_enabled = false;
+}

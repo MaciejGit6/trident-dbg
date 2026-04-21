@@ -163,6 +163,8 @@ void Debugger::delete_breakpoint(std::intptr_t addr) {
 void Debugger::dump_registers() {
     user_regs_struct regs;
     ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+    long ret = ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+    if (!ptrace_check("GETREGS", ret)) return;
 
     std::cout << std::hex
               << "  RIP: 0x" << regs.rip   << "  RFLAGS: 0x" << regs.eflags << "\n"
@@ -181,14 +183,20 @@ void Debugger::read_memory(std::intptr_t addr, size_t n_words) {
     std::cout << std::hex;
     for (size_t i = 0; i < n_words; ++i) {
         std::intptr_t cur = addr + static_cast<std::intptr_t>(i * 8);
+        errno = 0;
         long word = ptrace(PTRACE_PEEKDATA, m_pid, cur, nullptr);
+        if (word == -1 && errno != 0) {
+            std::cerr << "  0x" << cur << ":  read error: " << std::strerror(errno) << "\n";
+            break;
+        }
         std::cout << "  0x" << cur << ":  0x" << static_cast<uint64_t>(word) << "\n";
     }
     std::cout << std::dec;
 }
 
 void Debugger::write_memory(std::intptr_t addr, uint64_t val) {
-    ptrace(PTRACE_POKEDATA, m_pid, addr, val);
+    long ret = ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+    if (!ptrace_check("GETREGS", ret)) return;
     std::cout << "Wrote 0x" << std::hex << val
               << " to 0x" << addr << std::dec << "\n";
 }
@@ -240,4 +248,12 @@ void Debugger::handle_stop(int wait_status) {
         }
         dump_registers();
     }
+}
+
+bool Debugger::ptrace_check(const char* op, long ret) const {
+    if (ret == -1 && errno != 0) {
+        std::cerr << "ptrace(" << op << ") failed: " << std::strerror(errno) << "\n";
+        return false;
+    }
+    return true;
 }

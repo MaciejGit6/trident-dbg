@@ -32,4 +32,5 @@ private:
     void write_memory(std::intptr_t addr, uint64_t val);
     void print_help();
     std::intptr_t read_load_address();
+    bool ptrace_check(const char* op, long ret) const;
 };
