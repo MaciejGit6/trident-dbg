@@ -20,9 +20,10 @@ private:
     pid_t m_pid;
     std::string  m_prog;
     std::intptr_t m_load_addr = 0;
+    bool m_is_pie = false;
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
 
-    std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> file offset
+    std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> ELF st_value (link-time vaddr)
     void load_symbols();
     std::intptr_t resolve(const std::string& name_or_addr);
 

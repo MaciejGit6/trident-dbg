@@ -1,5 +1,6 @@
 #include "debugger.hpp"
 #include <cerrno>
+#include <climits>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -11,16 +12,23 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 
+// Returns the base address the main executable is mapped at: the start of
+// the mapping that covers file offset 0 of m_prog (the ELF header).
 std::intptr_t Debugger::read_load_address() {
+    char resolved[PATH_MAX];
+    std::string prog_path = realpath(m_prog.c_str(), resolved) ? resolved : m_prog;
+
     std::string maps_path = "/proc/" + std::to_string(m_pid) + "/maps";
     std::ifstream maps(maps_path);
     std::string line;
     while (std::getline(maps, line)) {
-        //Lines look like: 555555554000-555555556000 r--p 00000000 fd:01 12345  /path/to/binary
-        if (line.find(m_prog) == std::string::npos) continue;
-        if (line.find("r-xp") == std::string::npos) continue;   //executable segment
-        std::intptr_t addr = std::stol(line, nullptr, 16);
-        return addr;
+        // Lines look like: 555555554000-555555556000 r--p 00000000 fd:01 12345  /path/to/binary
+        std::istringstream ss(line);
+        std::string range, perms, offset, dev, inode, path;
+        ss >> range >> perms >> offset >> dev >> inode >> path;
+        if (path != prog_path) continue;
+        if (std::stoull(offset, nullptr, 16) != 0) continue;
+        return static_cast<std::intptr_t>(std::stoull(range, nullptr, 16));
     }
     return 0;
 }
@@ -28,14 +36,14 @@ std::intptr_t Debugger::read_load_address() {
 void Debugger::print_help() {
     std::cout <<
         "Commands:\n"
-        "  break <addr>  / b <addr>     Set a breakpoint at hex address\n"
-        "  delete <addr> / del <addr>   Remove breakpoint at hex address\n"
+        "  break <addr|sym> / b         Set a breakpoint at hex address or symbol\n"
+        "  delete <addr|sym> / del      Remove breakpoint\n"
         "  info          / bps          List all breakpoints\n"
         "  continue      / c            Resume execution\n"
         "  step          / si           Execute one instruction\n"
         "  regs                         Dump all general-purpose registers\n"
-        "  mem <addr> [n]               Read n 8-byte words from address\n"
-        "  memset <addr> <val>          Write one 8-byte word to address\n"
+        "  mem <addr|sym> [n]           Read n 8-byte words from address\n"
+        "  memset <addr|sym> <val>      Write one 8-byte word to address\n"
         "  setreg <reg> <val>           Write hex value to a named register\n"
         "  quit          / exit         Kill process and exit\n"
         "  help          / ?            Show this message\n";
@@ -50,6 +58,7 @@ void Debugger::load_symbols() {
     if (ehdr.e_ident[EI_MAG0] != ELFMAG0 || ehdr.e_ident[EI_CLASS] != ELFCLASS64) {
         std::cerr << "Not a 64-bit ELF binary\n"; return;
     }
+    m_is_pie = (ehdr.e_type == ET_DYN);
 
     // Read section headers
     std::vector<Elf64_Shdr> shdrs(ehdr.e_shnum);
@@ -93,18 +102,29 @@ void Debugger::load_symbols() {
     std::cout << "Loaded " << m_symbols.size() << " symbols.\n";
 }
 
+// Accepts a hex address (with or without 0x) or a symbol name.
+// Returns 0 on failure.
 std::intptr_t Debugger::resolve(const std::string& s) {
-    // If it looks like a hex address, use it directly
-    if (s.size() > 2 && s[0] == '0' && s[1] == 'x')
-        return std::stol(s, nullptr, 16);
-
     auto it = m_symbols.find(s);
-    if (it == m_symbols.end()) {
+    if (it != m_symbols.end()) {
+        // st_value is a link-time virtual address. Non-PIE (ET_EXEC) binaries
+        // are loaded exactly there; PIE (ET_DYN) binaries are linked at 0 and
+        // relocated by the load base.
+        return it->second + (m_is_pie ? m_load_addr : 0);
+    }
+
+    size_t pos = 0;
+    std::intptr_t addr = 0;
+    try {
+        addr = static_cast<std::intptr_t>(std::stoull(s, &pos, 16));
+    } catch (const std::invalid_argument&) {
+        pos = 0;
+    }
+    if (pos != s.size()) {
         std::cerr << "Symbol not found: " << s << "\n";
         return 0;
     }
-    // File offset + runtime load base = actual address
-    return it->second + m_load_addr;
+    return addr;
 }
 
 void Debugger::run() {
@@ -117,7 +137,7 @@ void Debugger::run() {
     std::cout << "Attached to process " << m_pid << "\n";
     if (m_load_addr)
         std::cout << "Load address: 0x" << std::hex << m_load_addr << std::dec
-                  << "  (add this to objdump offsets for PIE binaries)\n";
+                  << (m_is_pie ? "  (PIE: add this to objdump offsets)" : "  (non-PIE)") << "\n";
 
     signal(SIGINT, SIG_IGN);
 
@@ -150,20 +170,20 @@ void Debugger::handle_command(const std::string& line) {
             std::cout << "usage: mem <addr> [n_words]\n";
             return;
         }
-        std::intptr_t addr   = std::stol(args[1], nullptr, 16);
-        size_t        n      = args.size() >= 3 ? std::stoul(args[2]) : 1;
-        read_memory(addr, n);
+        std::intptr_t addr = resolve(args[1]);
+        size_t        n    = args.size() >= 3 ? std::stoul(args[2]) : 1;
+        if (addr) read_memory(addr, n);
     } else if (cmd == "info" || cmd == "bps") {
         list_breakpoints();
     } else if (cmd == "delete" || cmd == "del") {
         if (args.size() < 2) { std::cout << "usage: del <addr>\n"; return; }
-        std::intptr_t addr = std::stol(args[1], nullptr, 16);
-        delete_breakpoint(addr);
+        std::intptr_t addr = resolve(args[1]);
+        if (addr) delete_breakpoint(addr);
     } else if (cmd == "memset") {
         if (args.size() < 3) { std::cout << "usage: memset <addr> <val>\n"; return; }
-        std::intptr_t addr = std::stol(args[1], nullptr, 16);
+        std::intptr_t addr = resolve(args[1]);
         uint64_t      val  = std::stoull(args[2], nullptr, 16);
-        write_memory(addr, val);
+        if (addr) write_memory(addr, val);
     } else if (cmd == "setreg") {
         if (args.size() < 3) { std::cout << "usage: setreg <reg> <val>\n"; return; }
         uint64_t val = std::stoull(args[2], nullptr, 16);
