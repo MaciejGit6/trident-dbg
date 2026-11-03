@@ -19,7 +19,11 @@ void Breakpoint::enable() {
     }
     m_saved_data = static_cast<uint8_t>(data & 0xFF);
     long patched = ((data & ~0xFFL) | 0xCC);
-    ptrace(PTRACE_POKEDATA, m_pid, m_addr, patched);
+    if (ptrace(PTRACE_POKEDATA, m_pid, m_addr, patched) == -1) {
+        std::cerr << "enable: POKEDATA failed at 0x" << std::hex << m_addr << std::dec
+                  << ": " << std::strerror(errno) << "\n";
+        return;
+    }
     m_enabled = true;
 }
 
@@ -33,7 +37,11 @@ void Breakpoint::disable() {
         return;
     }
     long restored = ((data & ~0xFFL) | m_saved_data);
-    ptrace(PTRACE_POKEDATA, m_pid, m_addr, restored);
+    if (ptrace(PTRACE_POKEDATA, m_pid, m_addr, restored) == -1) {
+        std::cerr << "disable: POKEDATA failed at 0x" << std::hex << m_addr << std::dec
+                  << ": " << std::strerror(errno) << "\n";
+        return;
+    }
     m_enabled = false;
 }
 

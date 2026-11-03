@@ -2,6 +2,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <sys/ptrace.h>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -15,7 +16,13 @@ int main(int argc, char* argv[]) {
     if (std::strcmp(argv[1], "--pid") == 0) {
         if (argc < 3) { std::cerr << "usage: trident --pid <pid>\n"; return -1; }
 
-        pid_t pid = static_cast<pid_t>(std::stoi(argv[2]));
+        char* end = nullptr;
+        long parsed = std::strtol(argv[2], &end, 10);
+        if (*argv[2] == '\0' || *end != '\0' || parsed <= 0) {
+            std::cerr << "invalid pid: " << argv[2] << "\n";
+            return -1;
+        }
+        pid_t pid = static_cast<pid_t>(parsed);
         if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) == -1) {
             std::perror("ptrace(PTRACE_ATTACH)");
             return -1;
@@ -32,9 +39,18 @@ int main(int argc, char* argv[]) {
 
     } else {
         pid_t pid = fork();
+        if (pid == -1) {
+            std::perror("fork");
+            return -1;
+        }
         if (pid == 0) {
-            ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
+            if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1) {
+                std::perror("ptrace(PTRACE_TRACEME)");
+                _exit(127);
+            }
             execl(argv[1], argv[1], nullptr);
+            std::perror("execl");   // only reached if exec failed
+            _exit(127);
         } else {
             Debugger dbg(pid, argv[1], /*attached=*/false);
             dbg.run();
