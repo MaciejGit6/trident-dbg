@@ -201,31 +201,38 @@ void Debugger::handle_command(const std::string& line) {
 }
 
 void Debugger::continue_execution() {
-    step_over_breakpoint();   //rewinding RIP, restore byte; single-step past it, re-arm
+    int wait_status;
+    if (step_over_breakpoint(wait_status) && !WIFSTOPPED(wait_status)) {
+        handle_stop(wait_status);   // process died while stepping over the bp
+        return;
+    }
 
     ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
-
-    int wait_status;
     waitpid(m_pid, &wait_status, 0);
 
     handle_stop(wait_status);
 }
 
 void Debugger::step() {
-    step_over_breakpoint();
-
-    ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
-
     int wait_status;
-    waitpid(m_pid, &wait_status, 0);
+    // If we're sitting on a breakpoint, stepping over it already executes
+    // exactly one instruction; don't single-step a second time.
+    if (!step_over_breakpoint(wait_status)) {
+        ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
+        waitpid(m_pid, &wait_status, 0);
+    }
 
     handle_stop(wait_status);
 }
 
 void Debugger::set_breakpoint(std::intptr_t addr) {
+    if (m_breakpoints.count(addr)) {
+        std::cout << "Breakpoint already set at 0x" << std::hex << addr << std::dec << "\n";
+        return;
+    }
     Breakpoint bp(m_pid, addr);
-
     bp.enable();
+    if (!bp.is_enabled()) return;   // enable() already printed the error
     m_breakpoints[addr] = bp;
     std::cout << "Breakpoint set at 0x" << std::hex << addr << std::dec << "\n";
 }
@@ -248,9 +255,20 @@ void Debugger::delete_breakpoint(std::intptr_t addr) {
         std::cout << "No breakpoint at 0x" << std::hex << addr << std::dec << "\n";
         return;
     }
-    if (it->second.is_enabled())
-        it->second.disable();
+    it->second.disable();
     m_breakpoints.erase(it);
+
+    // If we're stopped just past this INT3, rewind RIP so the original
+    // instruction still executes on the next continue/step.
+    if (m_stopped_at_bp) {
+        user_regs_struct regs;
+        if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs) != -1 &&
+            static_cast<std::intptr_t>(regs.rip) - 1 == addr) {
+            regs.rip -= 1;
+            ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+            m_stopped_at_bp = false;
+        }
+    }
     std::cout << "Breakpoint at 0x" << std::hex << addr << std::dec << " removed.\n";
 }
 
@@ -303,26 +321,39 @@ std::vector<std::string> Debugger::split_input(const std::string& s) {
     return out;
 }
 
-void Debugger::step_over_breakpoint() {
+// If the tracee is stopped on an enabled breakpoint, execute the original
+// instruction underneath it (exactly one instruction) and re-arm the INT3.
+// Two cases:
+//   - we just hit the INT3 (m_stopped_at_bp): RIP = bp + 1, rewind it;
+//   - we arrived at bp by single-stepping/setreg: RIP = bp, the INT3 hasn't run.
+// Returns true if it stepped (wait_status is then filled in).
+bool Debugger::step_over_breakpoint(int& wait_status) {
     user_regs_struct regs;
-    ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
+    if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs) == -1) return false;
 
-    std::intptr_t possible_bp = static_cast<std::intptr_t>(regs.rip) - 1;
-    auto it = m_breakpoints.find(possible_bp);
-    if (it == m_breakpoints.end() || !it->second.is_enabled()) return;
+    std::intptr_t bp_addr = static_cast<std::intptr_t>(regs.rip);
+    if (m_stopped_at_bp) bp_addr -= 1;
+    m_stopped_at_bp = false;
+
+    auto it = m_breakpoints.find(bp_addr);
+    if (it == m_breakpoints.end() || !it->second.is_enabled()) return false;
 
     it->second.disable();                                        // restore original byte
-    regs.rip = static_cast<unsigned long long>(possible_bp);    // rewind RIP by 1
-    ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+    if (static_cast<std::intptr_t>(regs.rip) != bp_addr) {
+        regs.rip = static_cast<unsigned long long>(bp_addr);     // rewind RIP by 1
+        ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+    }
 
     ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);         // step over real instruction
-    int wait_status;
     waitpid(m_pid, &wait_status, 0);
 
-    it->second.enable();                                         // re-arm
+    if (WIFSTOPPED(wait_status))
+        it->second.enable();                                     // re-arm
+    return true;
 }
 
 void Debugger::handle_stop(int wait_status) {
+    m_stopped_at_bp = false;
     if (WIFEXITED(wait_status)) {
         std::cout << "Process exited with code " << WEXITSTATUS(wait_status) << "\n";
         std::exit(0);
@@ -330,13 +361,19 @@ void Debugger::handle_stop(int wait_status) {
     if (WIFSTOPPED(wait_status)) {
         int sig = WSTOPSIG(wait_status);
         if (sig == SIGTRAP) {
+            siginfo_t info;
+            ptrace(PTRACE_GETSIGINFO, m_pid, nullptr, &info);
             user_regs_struct regs;
             ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
             std::intptr_t possible_bp = static_cast<std::intptr_t>(regs.rip) - 1;
-            if (m_breakpoints.count(possible_bp))
+            // INT3 reports SI_KERNEL (or TRAP_BRKPT); a single-step reports TRAP_TRACE.
+            bool int3 = info.si_code == SI_KERNEL || info.si_code == TRAP_BRKPT;
+            if (int3 && m_breakpoints.count(possible_bp)) {
+                m_stopped_at_bp = true;
                 std::cout << "Breakpoint hit at 0x" << std::hex << possible_bp << std::dec << "\n";
-            else
+            } else {
                 std::cout << "Stopped (SIGTRAP).\n";
+            }
         } else {
             std::cout << "Stopped. Signal: " << sig << " (" << strsignal(sig) << ")\n";
         }
@@ -381,6 +418,9 @@ void Debugger::set_register(const std::string& name, uint64_t val) {
 
     ret = ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
     if (!ptrace_check("SETREGS", ret)) return;
+
+    // Writing RIP moves us off whatever INT3 we were stopped past.
+    if (name == "rip") m_stopped_at_bp = false;
 
     std::cout << name << " = 0x" << std::hex << val << std::dec << "\n";
 }

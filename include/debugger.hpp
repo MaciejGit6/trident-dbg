@@ -21,6 +21,7 @@ private:
     std::string  m_prog;
     std::intptr_t m_load_addr = 0;
     bool m_is_pie = false;
+    bool m_stopped_at_bp = false;  // last stop was an INT3 hit (RIP = bp + 1)
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
 
     std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> ELF st_value (link-time vaddr)
@@ -34,7 +35,7 @@ private:
     void set_breakpoint(std::intptr_t addr);
     void dump_registers();
     std::vector<std::string> split_input(const std::string& s);
-    void step_over_breakpoint();
+    bool step_over_breakpoint(int& wait_status);
     void handle_stop(int wait_status);
 
     void read_memory(std::intptr_t addr, size_t n_words);

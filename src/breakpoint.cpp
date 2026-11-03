@@ -9,6 +9,7 @@ Breakpoint::Breakpoint(pid_t pid, std::intptr_t addr)
     : m_pid{pid}, m_addr{addr}, m_enabled{false}, m_saved_data{0} {}
 
 void Breakpoint::enable() {
+    if (m_enabled) return;   // never save 0xCC as the "original" byte
     errno = 0;
     long data = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
     if (data == -1 && errno != 0) {
@@ -23,6 +24,7 @@ void Breakpoint::enable() {
 }
 
 void Breakpoint::disable() {
+    if (!m_enabled) return;
     errno = 0;
     long data = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
     if (data == -1 && errno != 0) {
