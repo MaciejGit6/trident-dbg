@@ -12,7 +12,7 @@ I built Trident because I wanted to stop treating debuggers like black boxes and
 
 **Register & Memory Inspection** — Peek into (and modify) CPU registers and raw memory blocks while the process is paused.
 
-**ELF Parsing** — Navigates ELF structures to map the binary layout and locate where things are actually happening in memory.
+**ELF Parsing** — Reads the binary's `.symtab` so you can break on function names like `main`, and works out where the binary was actually loaded (including PIE binaries with ASLR).
 
 ## Build
 
@@ -30,26 +30,63 @@ make
 ./trident_dbg --pid <pid>
 ```
 
-The fastest way to test it is with the included dummy program:
+The fastest way to test it is with the included dummy program. From the `build/` directory:
 
 ```bash
-# In one terminal, compile the dummy target
-g++ examples/dummy.cpp -o examples/dummy
+# Compile the dummy target
+g++ -g ../examples/dummy.cpp -o ../examples/dummy
 
 # Then run the debugger against it
-./trident_dbg examples/dummy
+./trident_dbg ../examples/dummy
 ```
 
-Available commands inside the debugger:
+A short session:
+
+```
+Loaded 29 symbols.
+Attached to process 21341
+Load address: 0x400000  (non-PIE)
+trident> b main
+Breakpoint set at 0x401176
+trident> c
+Breakpoint hit at 0x401176
+  RIP: 0x401177  RFLAGS: 0x246
+  ...
+trident> si
+Stopped (SIGTRAP).
+  RIP: 0x40117a  RFLAGS: 0x246
+  ...
+```
+
+(After a breakpoint hit RIP shows one byte past the breakpoint: that's the `INT 3` that just executed. Trident rewinds it before resuming.)
+
+Available commands inside the debugger. Anywhere an `<addr>` is taken you can pass either a hex address (`0x401176`, or without the `0x`) or a symbol name (`main`):
 
 | Command | Description |
 |---|---|
-| `break <addr>` / `b <addr>` | Set a breakpoint at a hex address |
-| `continue` / `c` | Resume execution |
-| `regs` | Dump CPU registers |
-| `quit` / `exit` | Kill the process and exit |
-| `step` / `si`               | Execute one instruction and stop      |
-| `mem <addr> [n]`            | Read n 8-byte words from address (default 1) |
+| `break <addr>` / `b <addr>` | Set a breakpoint |
+| `delete <addr>` / `del <addr>` | Remove a breakpoint |
+| `info` / `bps` | List breakpoints |
+| `continue` / `c` | Resume execution until the next breakpoint or signal |
+| `step` / `si` | Execute one instruction and stop |
+| `regs` | Dump general-purpose registers |
+| `setreg <reg> <val>` | Write a hex value to a register (`rax`, `rip`, `r8`, ...) |
+| `mem <addr> [n]` | Read n 8-byte words from address (default 1) |
+| `memset <addr> <val>` | Write one 8-byte hex word to address |
+| `help` / `?` | Show the command list |
+| `quit` / `exit` | Kill the process (or detach from it, if attached with `--pid`) and exit |
+
+Signals the target receives (e.g. `SIGSEGV`) are reported when it stops and are delivered to it on the next `continue`/`step`.
+
+### Attaching with `--pid`
+
+Most distros (and WSL) ship with `kernel.yama.ptrace_scope = 1`, which only allows tracing your own child processes. To attach to an arbitrary process, either run as root or relax it for the session:
+
+```bash
+sudo sysctl kernel.yama.ptrace_scope=0
+```
+
+On `quit`, Trident removes its breakpoints and detaches, so the process keeps running.
 
 ## How It Works
 
