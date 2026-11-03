@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
             std::perror("readlink /proc/<pid>/exe");
             return -1;
         }
-        Debugger dbg(pid, exe_path);
+        Debugger dbg(pid, exe_path, /*attached=*/true);
         dbg.run();
 
     } else {
@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
             ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
             execl(argv[1], argv[1], nullptr);
         } else {
-            Debugger dbg(pid, argv[1]);
+            Debugger dbg(pid, argv[1], /*attached=*/false);
             dbg.run();
         }
     }

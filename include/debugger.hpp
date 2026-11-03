@@ -11,14 +11,15 @@
 
 class Debugger {
 public:
-    Debugger(pid_t pid, std::string prog)
-        : m_pid{pid}, m_prog{std::move(prog)} {}
+    Debugger(pid_t pid, std::string prog, bool attached)
+        : m_pid{pid}, m_prog{std::move(prog)}, m_attached{attached} {}
     void run();
 
 
 private:
     pid_t m_pid;
     std::string  m_prog;
+    bool m_attached;
     std::intptr_t m_load_addr = 0;
     bool m_is_pie = false;
     bool m_stopped_at_bp = false;  // last stop was an INT3 hit (RIP = bp + 1)
@@ -47,4 +48,5 @@ private:
     std::intptr_t read_load_address();
     bool ptrace_check(const char* op, long ret) const;
     void set_register(const std::string& name, uint64_t val);
+    void quit();
 };

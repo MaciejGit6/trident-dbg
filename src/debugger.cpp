@@ -45,7 +45,7 @@ void Debugger::print_help() {
         "  mem <addr|sym> [n]           Read n 8-byte words from address\n"
         "  memset <addr|sym> <val>      Write one 8-byte word to address\n"
         "  setreg <reg> <val>           Write hex value to a named register\n"
-        "  quit          / exit         Kill process and exit\n"
+        "  quit          / exit         Kill (or detach from) process and exit\n"
         "  help          / ?            Show this message\n";
 }
 
@@ -148,6 +148,7 @@ void Debugger::run() {
         if (!std::getline(std::cin, line)) break;
         handle_command(line);
     }
+    quit();
 }
 
 void Debugger::handle_command(const std::string& line) {
@@ -193,11 +194,32 @@ void Debugger::handle_command(const std::string& line) {
     } else if (cmd == "help" || cmd == "?") {
         print_help();
     } else if (cmd == "quit" || cmd == "exit") {
-        kill(m_pid, SIGKILL);
-        exit(0);
+        quit();
     } else {
         std::cout << "Unknown command:  " << cmd << "\n";
     }
+}
+
+void Debugger::quit() {
+    if (m_attached) {
+        // Leave the process the way we found it: remove INT3s, then detach.
+        for (auto& [addr, bp] : m_breakpoints) bp.disable();
+        if (m_stopped_at_bp) {
+            user_regs_struct regs;
+            if (ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs) != -1) {
+                regs.rip -= 1;
+                ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
+            }
+        }
+        if (ptrace(PTRACE_DETACH, m_pid, nullptr, nullptr) == -1)
+            std::perror("ptrace(PTRACE_DETACH)");
+        else
+            std::cout << "Detached from process " << m_pid << "\n";
+    } else {
+        kill(m_pid, SIGKILL);
+        waitpid(m_pid, nullptr, 0);
+    }
+    std::exit(0);
 }
 
 void Debugger::continue_execution() {
