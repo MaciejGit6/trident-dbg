@@ -207,7 +207,8 @@ void Debugger::continue_execution() {
         return;
     }
 
-    ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
+    ptrace(PTRACE_CONT, m_pid, nullptr, m_pending_sig);
+    m_pending_sig = 0;
     waitpid(m_pid, &wait_status, 0);
 
     handle_stop(wait_status);
@@ -218,7 +219,8 @@ void Debugger::step() {
     // If we're sitting on a breakpoint, stepping over it already executes
     // exactly one instruction; don't single-step a second time.
     if (!step_over_breakpoint(wait_status)) {
-        ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
+        ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, m_pending_sig);
+        m_pending_sig = 0;
         waitpid(m_pid, &wait_status, 0);
     }
 
@@ -344,7 +346,8 @@ bool Debugger::step_over_breakpoint(int& wait_status) {
         ptrace(PTRACE_SETREGS, m_pid, nullptr, &regs);
     }
 
-    ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);         // step over real instruction
+    ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, m_pending_sig);   // step over real instruction
+    m_pending_sig = 0;
     waitpid(m_pid, &wait_status, 0);
 
     if (WIFSTOPPED(wait_status))
@@ -356,6 +359,11 @@ void Debugger::handle_stop(int wait_status) {
     m_stopped_at_bp = false;
     if (WIFEXITED(wait_status)) {
         std::cout << "Process exited with code " << WEXITSTATUS(wait_status) << "\n";
+        std::exit(0);
+    }
+    if (WIFSIGNALED(wait_status)) {
+        int sig = WTERMSIG(wait_status);
+        std::cout << "Process killed by signal " << sig << " (" << strsignal(sig) << ")\n";
         std::exit(0);
     }
     if (WIFSTOPPED(wait_status)) {
@@ -375,6 +383,10 @@ void Debugger::handle_stop(int wait_status) {
                 std::cout << "Stopped (SIGTRAP).\n";
             }
         } else {
+            // Deliver real signals (SIGSEGV, SIGTERM, ...) on the next resume
+            // instead of silently swallowing them. SIGINT/SIGSTOP are the
+            // debugger's own interrupts and are not forwarded.
+            if (sig != SIGINT && sig != SIGSTOP) m_pending_sig = sig;
             std::cout << "Stopped. Signal: " << sig << " (" << strsignal(sig) << ")\n";
         }
         dump_registers();

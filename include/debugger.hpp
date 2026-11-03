@@ -22,6 +22,7 @@ private:
     std::intptr_t m_load_addr = 0;
     bool m_is_pie = false;
     bool m_stopped_at_bp = false;  // last stop was an INT3 hit (RIP = bp + 1)
+    int  m_pending_sig = 0;        // signal to deliver to the tracee on next resume
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
 
     std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> ELF st_value (link-time vaddr)
