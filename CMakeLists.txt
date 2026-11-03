@@ -29,3 +29,8 @@ target_compile_options(trident_dbg PRIVATE
 target_include_directories(trident_dbg PRIVATE 
     ${CMAKE_SOURCE_DIR}/include
 )
+
+# Example target to practice on (build/dummy). Built without optimisation
+# so the code matches the source closely when stepping through it.
+add_executable(dummy examples/dummy.cpp)
+target_compile_options(dummy PRIVATE -g -O0)

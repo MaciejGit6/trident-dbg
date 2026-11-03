@@ -34,3 +34,5 @@
 # Build directory (CMake standard)
 build/
 bin/
+# Old location of the example binary (now built by CMake into build/)
+examples/dummy

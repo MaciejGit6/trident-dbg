@@ -30,37 +30,33 @@ make
 ./trident_dbg --pid <pid>
 ```
 
-The fastest way to test it is with the included dummy program. From the `build/` directory:
+The fastest way to test it is with the included dummy program (`examples/dummy.cpp`), which the build above also compiles into `build/dummy`. From the `build/` directory:
 
 ```bash
-# Compile the dummy target
-g++ -g ../examples/dummy.cpp -o ../examples/dummy
-
-# Then run the debugger against it
-./trident_dbg ../examples/dummy
+./trident_dbg ./dummy
 ```
 
 A short session:
 
 ```
-Loaded 29 symbols.
-Attached to process 21341
-Load address: 0x400000  (non-PIE)
+Loaded 28 symbols.
+Attached to process 21929
+Load address: 0x5fa357ab2000  (PIE: add this to objdump offsets)
 trident> b main
-Breakpoint set at 0x401176
+Breakpoint set at 0x5fa357ab3189
 trident> c
-Breakpoint hit at 0x401176
-  RIP: 0x401177  RFLAGS: 0x246
+Breakpoint hit at 0x5fa357ab3189
+  RIP: 0x5fa357ab318a  RFLAGS: 0x246
   ...
 trident> si
 Stopped (SIGTRAP).
-  RIP: 0x40117a  RFLAGS: 0x246
+  RIP: 0x5fa357ab318d  RFLAGS: 0x246
   ...
 ```
 
 (After a breakpoint hit RIP shows one byte past the breakpoint: that's the `INT 3` that just executed. Trident rewinds it before resuming.)
 
-Available commands inside the debugger. Anywhere an `<addr>` is taken you can pass either a hex address (`0x401176`, or without the `0x`) or a symbol name (`main`):
+Available commands inside the debugger. Anywhere an `<addr>` is taken you can pass either a hex address (`0x5fa357ab3189`, or without the `0x`) or a symbol name (`main`):
 
 | Command | Description |
 |---|---|
