@@ -34,3 +34,8 @@ target_include_directories(trident_dbg PRIVATE
 # so the code matches the source closely when stepping through it.
 add_executable(dummy examples/dummy.cpp)
 target_compile_options(dummy PRIVATE -g -O0)
+
+# End-to-end smoke tests (run with `ctest` from the build directory)
+enable_testing()
+add_test(NAME smoke
+         COMMAND ${CMAKE_SOURCE_DIR}/tests/smoke.sh ${CMAKE_BINARY_DIR})

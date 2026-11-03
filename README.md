@@ -22,6 +22,16 @@ cmake ..
 make
 ```
 
+## Tests
+
+`tests/smoke.sh` drives the debugger with scripted commands (breakpoints, stepping, memory/register writes, bad input, signal forwarding, exit codes) and checks the output. From `build/`:
+
+```bash
+ctest --output-on-failure
+```
+
+CI runs the same build (with `-Werror`) and tests on GCC and Clang for every push and PR.
+
 ## Usage
 
 ```bash
