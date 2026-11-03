@@ -4,17 +4,22 @@
 #include <map>
 #include <sys/types.h>
 #include <unordered_map>
+#include <vector>
+#include <utility>
+#include <cstdint>
+#include <cstddef>
 
 class Debugger {
 public:
-    Debugger(pid_t pid) : m_pid{pid} {}
+    Debugger(pid_t pid, std::string prog)
+        : m_pid{pid}, m_prog{std::move(prog)} {}
     void run();
 
 
 private:
     pid_t m_pid;
     std::string  m_prog;
-    std::intptr_t m_load_addr;
+    std::intptr_t m_load_addr = 0;
     std::map<std::intptr_t, Breakpoint> m_breakpoints;
 
     std::unordered_map<std::string, std::intptr_t> m_symbols;  // name -> file offset
@@ -39,4 +44,4 @@ private:
     std::intptr_t read_load_address();
     bool ptrace_check(const char* op, long ret) const;
     void set_register(const std::string& name, uint64_t val);
-};
+};

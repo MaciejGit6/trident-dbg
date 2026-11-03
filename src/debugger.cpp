@@ -1,11 +1,15 @@
 #include "debugger.hpp"
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <elf.h>
+#include <fstream>
 #include <iostream>
 #include <sstream>
-#include <csignal>
 #include <sys/ptrace.h>
-#include <sys/wait.h>
 #include <sys/user.h>
-#include <fstream>
+#include <sys/wait.h>
 
 std::intptr_t Debugger::read_load_address() {
     std::string maps_path = "/proc/" + std::to_string(m_pid) + "/maps";
@@ -22,7 +26,7 @@ std::intptr_t Debugger::read_load_address() {
 }
 
 void Debugger::print_help() {
-    std::cout 
+    std::cout <<
         "Commands:\n"
         "  break <addr>  / b <addr>     Set a breakpoint at hex address\n"
         "  delete <addr> / del <addr>   Remove breakpoint at hex address\n"
@@ -32,9 +36,9 @@ void Debugger::print_help() {
         "  regs                         Dump all general-purpose registers\n"
         "  mem <addr> [n]               Read n 8-byte words from address\n"
         "  memset <addr> <val>          Write one 8-byte word to address\n"
+        "  setreg <reg> <val>           Write hex value to a named register\n"
         "  quit          / exit         Kill process and exit\n"
         "  help          / ?            Show this message\n";
-        "  setreg <reg> <val>           Write hex value to a named register\n"
 }
 
 void Debugger::load_symbols() {
@@ -115,7 +119,6 @@ void Debugger::run() {
         std::cout << "Load address: 0x" << std::hex << m_load_addr << std::dec
                   << "  (add this to objdump offsets for PIE binaries)\n";
 
-
     signal(SIGINT, SIG_IGN);
 
     std::string line;
@@ -189,7 +192,7 @@ void Debugger::continue_execution() {
 }
 
 void Debugger::step() {
-    step_over_breakpoint();  
+    step_over_breakpoint();
 
     ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
 
@@ -234,7 +237,6 @@ void Debugger::delete_breakpoint(std::intptr_t addr) {
 
 void Debugger::dump_registers() {
     user_regs_struct regs;
-    ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
     long ret = ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
     if (!ptrace_check("GETREGS", ret)) return;
 
@@ -267,8 +269,8 @@ void Debugger::read_memory(std::intptr_t addr, size_t n_words) {
 }
 
 void Debugger::write_memory(std::intptr_t addr, uint64_t val) {
-    long ret = ptrace(PTRACE_GETREGS, m_pid, nullptr, &regs);
-    if (!ptrace_check("GETREGS", ret)) return;
+    long ret = ptrace(PTRACE_POKEDATA, m_pid, addr, val);
+    if (!ptrace_check("POKEDATA", ret)) return;
     std::cout << "Wrote 0x" << std::hex << val
               << " to 0x" << addr << std::dec << "\n";
 }
@@ -303,7 +305,7 @@ void Debugger::step_over_breakpoint() {
 void Debugger::handle_stop(int wait_status) {
     if (WIFEXITED(wait_status)) {
         std::cout << "Process exited with code " << WEXITSTATUS(wait_status) << "\n";
-        exit(0);
+        std::exit(0);
     }
     if (WIFSTOPPED(wait_status)) {
         int sig = WSTOPSIG(wait_status);
